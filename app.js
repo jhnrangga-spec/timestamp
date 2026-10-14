@@ -11,10 +11,10 @@ let hasPhoto = false;
 let photoFile = null;      // disimpan agar EXIF bisa dibaca ulang kapan saja
 
 const SAMPLE = {
-  place: 'Jailolo, Halmahera Barat, Maluku Utara, Indonesia',
-  lat: '1.096827',
-  lon: '127.470366',
-  alt: '22.4',
+  place: 'Bastiong, Ternate Selatan, Kota Ternate, Maluku Utara, Indonesia',
+  lat: '0.763800',
+  lon: '127.376290',
+  alt: '3.0',
   brand: 'GPS Map Camera',
 };
 
@@ -583,6 +583,7 @@ function ensureLeaflet() {
 async function initMap() {
   if (!(await ensureLeaflet())) {
     $('map').innerHTML = '<p class="empty">Peta tidak bisa dimuat (Leaflet gagal diambil). Koordinat masih bisa diisi manual.</p>';
+    updatePinInfo();
     return;
   }
   const start = currentLatLng();
