@@ -264,10 +264,28 @@ async function getMiniMap(lat, lon, zoom, style, size) {
 /* ---------------------------------------------------------------- render */
 
 const STAMP_THEMES = {
-  dark:   { bg: '0,0,0',       title: '#ffffff', body: '#eaeaea', accent: null },
-  light:  { bg: '255,255,255', title: '#101620', body: '#39445a', accent: null },
-  accent: { bg: '0,0,0',       title: '#ffffff', body: '#eaeaea', accent: '#76e0c2' },
+  dark:   { bg: '0,0,0',       title: '#ffffff', body: '#eaeaea', accent: null,      plain: '#ffb300' },
+  light:  { bg: '255,255,255', title: '#101620', body: '#39445a', accent: null,      plain: '#ffffff' },
+  accent: { bg: '0,0,0',       title: '#ffffff', body: '#eaeaea', accent: '#76e0c2', plain: '#76e0c2' },
 };
+
+/* Model stempel. `full` = selebar foto, `usesMap` = memakai peta mini. */
+const LAYOUTS = {
+  card:    { usesMap: true,  full: true },
+  bigdate: { usesMap: true,  full: true },
+  compact: { usesMap: true,  full: false },
+  bar:     { usesMap: false, full: true },
+  classic: { usesMap: false, full: false },
+};
+
+function layoutKey() {
+  const key = $('layout').value;
+  return LAYOUTS[key] ? key : 'card';
+}
+
+function layoutUsesMap() {
+  return LAYOUTS[layoutKey()].usesMap && $('showMap').checked;
+}
 
 function wrapText(c, text, maxWidth, maxLines) {
   const words = String(text).split(/\s+/).filter(Boolean);
@@ -306,6 +324,349 @@ function stampGeometry(w, h) {
   return { base, pad: base * 0.78, mapSide: base * 5.6 };
 }
 
+/** Seluruh teks yang bisa dipakai tiap model stempel. */
+function stampData() {
+  const d = currentInstant();
+  const tz = $('timezone').value;
+  const place = $('place').value.trim() || 'Lokasi tidak diketahui';
+  const headline = $('headline').value.trim() || place.split(',').slice(0, 2).join(',').trim();
+  const lat = $('lat').value.trim();
+  const lon = $('lon').value.trim();
+  const altValue = $('alt').value.trim() || '—';
+
+  return {
+    d, tz, place, headline,
+    sameHeadline: place === headline,
+    coords: $('showCoords').checked
+      ? `Lat ${coordLabel(lat, 'N', 'S')}   Long ${coordLabel(lon, 'E', 'W')}` : null,
+    coordsShort: $('showCoords').checked ? `${lat || '—'}, ${lon || '—'}` : null,
+    alt: $('showAlt').checked ? `Ketinggian ${altValue} meter` : null,
+    altShort: $('showAlt').checked ? `${altValue} m` : null,
+    date: $('showDate').checked ? fmtDate(d, tz) : null,
+    dateShort: $('showDate').checked
+      ? new Intl.DateTimeFormat('id-ID', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: tz }).format(d)
+      : null,
+    time: $('showTime').checked ? `${fmtTime(d, tz)} ${tzLabel(d, tz)}` : null,
+    clock: $('showTime').checked
+      ? new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: tz }).format(d)
+      : null,
+    gmt: $('showTime').checked ? `${gmtOffsetLabel(d, tz)}  ·  GMT ${fmtTime(d, 'UTC')}` : null,
+    brand: $('showBrand').checked ? $('brand').value.trim() : '',
+  };
+}
+
+/* ------------------------------------------------- perkakas menggambar */
+
+function roundBox(c, x, y, w, h, r, fill) {
+  c.beginPath();
+  c.roundRect(x, y, w, h, r);
+  c.fillStyle = fill;
+  c.fill();
+}
+
+/** Tempatkan kotak sesuai pilihan posisi. Layout selebar foto hanya memakai sisi atas/bawah. */
+function boxPosition(w, h, boxW, boxH, pad, full) {
+  const pos = $('position').value || 'bottom-right';
+  const top = pos.startsWith('top');
+  const left = pos.endsWith('left');
+  return {
+    x: full ? (w - boxW) / 2 : (left ? pad : w - boxW - pad),
+    y: top ? pad : h - boxH - pad,
+  };
+}
+
+function drawTextLines(c, lines, x, y, maxWidth) {
+  let ty = y;
+  for (const line of lines) {
+    c.fillStyle = line.color;
+    c.font = `${line.weight || 400} ${line.size}px Arial, sans-serif`;
+    c.fillText(line.text, x, ty, maxWidth);
+    ty += line.size * (line.lh || 1.3);
+  }
+  return ty - y;
+}
+
+function linesHeight(lines) {
+  return lines.reduce((sum, l) => sum + l.size * (l.lh || 1.3), 0);
+}
+
+function drawMiniFrame(c, mini, x, y, size, radius) {
+  c.save();
+  c.beginPath();
+  c.roundRect(x, y, size, size, radius);
+  c.clip();
+  c.drawImage(mini, x, y, size, size);
+  c.restore();
+  c.save();
+  c.lineWidth = Math.max(1, size * 0.012);
+  c.strokeStyle = 'rgba(255,255,255,.55)';
+  c.beginPath();
+  c.roundRect(x, y, size, size, radius);
+  c.stroke();
+  c.restore();
+}
+
+/** Label kamera sebagai pil kecil di atas (atau di bawah) kotak stempel. */
+function drawBrandBadge(c, brand, boxX, boxY, boxW, boxH, base, below) {
+  if (!brand) return;
+  c.font = `700 ${base * 0.72}px Arial, sans-serif`;
+  const bw = Math.min(boxW * 0.6, c.measureText(brand).width + base * 1.1);
+  const bh = base * 1.3;
+  const bx = boxX + boxW - bw;
+  const by = below ? boxY + boxH + base * 0.3 : boxY - bh - base * 0.3;
+  roundBox(c, bx, by, bw, bh, bh * 0.28, 'rgba(245,245,245,.92)');
+  c.fillStyle = '#1d2430';
+  c.textBaseline = 'middle';
+  c.fillText(brand, bx + base * 0.55, by + bh / 2, bw - base * 1.1);
+  c.textBaseline = 'top';
+}
+
+/* --------------------------------------------------------- model stempel */
+
+/** Kartu peta: peta mini di kiri, rincian di kanan, selebar foto. */
+function layoutCard(c, w, h, g, data, theme, mini) {
+  const { base, pad, mapSide } = g;
+  const withMap = !!mini;
+  const boxW = w - pad * 2;
+  const textW = Math.max(base * 6, boxW - pad * 2 - (withMap ? mapSide + base * 0.9 : 0));
+
+  const lines = [];
+  c.font = `700 ${base * 1.18}px Arial, sans-serif`;
+  for (const t of wrapText(c, data.headline, textW, 1)) {
+    lines.push({ text: t, size: base * 1.18, weight: 700, color: theme.title, lh: 1.32 });
+  }
+  if (!data.sameHeadline) {
+    c.font = `400 ${base * 0.78}px Arial, sans-serif`;
+    for (const t of wrapText(c, data.place, textW, 2)) {
+      lines.push({ text: t, size: base * 0.78, weight: 400, color: theme.body });
+    }
+  }
+  if (data.coords) lines.push({ text: data.coords, size: base * 0.8, weight: 500, color: theme.body, lh: 1.32 });
+  if (data.alt) lines.push({ text: data.alt, size: base * 0.78, weight: 400, color: theme.body, lh: 1.32 });
+  if (data.date || data.time) {
+    lines.push({ text: [data.date, data.time].filter(Boolean).join('  ·  '),
+      size: base * 0.8, weight: 500, color: theme.title, lh: 1.32 });
+  }
+  if (data.gmt) lines.push({ text: data.gmt, size: base * 0.72, weight: 400, color: theme.body });
+
+  const textH = linesHeight(lines);
+  const boxH = Math.max(withMap ? mapSide : 0, textH) + pad * 1.2;
+  const { x, y } = boxPosition(w, h, boxW, boxH, pad * 0.8, true);
+
+  roundBox(c, x, y, boxW, boxH, Math.min(base * 0.8, boxH * 0.22),
+    `rgba(${theme.bg},${Number($('opacity').value) / 100})`);
+  if (theme.accent) roundBox(c, x, y, Math.max(3, base * 0.14), boxH, base * 0.3, theme.accent);
+
+  let textX = x + pad;
+  if (withMap) {
+    drawMiniFrame(c, mini, x + pad, y + (boxH - mapSide) / 2, mapSide, Math.min(base * 0.45, mapSide * 0.12));
+    textX = x + pad + mapSide + base * 0.9;
+  }
+  drawTextLines(c, lines, textX, y + (boxH - textH) / 2, textW);
+  drawBrandBadge(c, data.brand, x, y, boxW, boxH, base, $('position').value.startsWith('top'));
+}
+
+/** Jam besar: jam raksasa di kiri, rincian di tengah, peta di kanan. */
+function layoutBigDate(c, w, h, g, data, theme, mini) {
+  const { base, pad, mapSide } = g;
+  const withMap = !!mini;
+  const boxW = w - pad * 2;
+  const clockSize = base * 2.5;
+
+  c.font = `700 ${clockSize}px Arial, sans-serif`;
+  const clockText = data.clock || data.dateShort || '';
+  const clockW = clockText ? c.measureText(clockText).width : 0;
+
+  const leftLines = [];
+  if (data.dateShort) leftLines.push({ text: data.dateShort, size: base * 0.82, weight: 500, color: theme.body });
+  if (data.time) {
+    const zone = data.time.split(' ').pop();
+    leftLines.push({ text: `${zone}  ·  ${gmtOffsetLabel(data.d, data.tz)}`, size: base * 0.7, weight: 400, color: theme.body });
+  }
+  const leftW = Math.max(clockW, ...leftLines.map((l) => {
+    c.font = `${l.weight} ${l.size}px Arial, sans-serif`;
+    return c.measureText(l.text).width;
+  }), base * 4);
+
+  const gap = base * 1.1;
+  const textW = Math.max(base * 5, boxW - pad * 2 - leftW - gap - (withMap ? mapSide + gap : 0));
+  const mid = [];
+  c.font = `700 ${base * 1.0}px Arial, sans-serif`;
+  for (const t of wrapText(c, data.headline, textW, 1)) {
+    mid.push({ text: t, size: base, weight: 700, color: theme.title, lh: 1.34 });
+  }
+  if (!data.sameHeadline) {
+    c.font = `400 ${base * 0.74}px Arial, sans-serif`;
+    for (const t of wrapText(c, data.place, textW, 2)) {
+      mid.push({ text: t, size: base * 0.74, weight: 400, color: theme.body });
+    }
+  }
+  if (data.coords) mid.push({ text: data.coords, size: base * 0.74, weight: 500, color: theme.body });
+  if (data.alt) mid.push({ text: data.alt, size: base * 0.74, weight: 400, color: theme.body });
+
+  const clockBlockH = (clockText ? clockSize * 1.1 : 0) + linesHeight(leftLines);
+  const boxH = Math.max(withMap ? mapSide : 0, clockBlockH, linesHeight(mid)) + pad * 1.2;
+  const { x, y } = boxPosition(w, h, boxW, boxH, pad * 0.8, true);
+
+  roundBox(c, x, y, boxW, boxH, Math.min(base * 0.8, boxH * 0.22),
+    `rgba(${theme.bg},${Number($('opacity').value) / 100})`);
+  if (theme.accent) roundBox(c, x, y, Math.max(3, base * 0.14), boxH, base * 0.3, theme.accent);
+
+  let ly = y + (boxH - clockBlockH) / 2;
+  if (clockText) {
+    c.fillStyle = theme.title;
+    c.font = `700 ${clockSize}px Arial, sans-serif`;
+    c.fillText(clockText, x + pad, ly);
+    ly += clockSize * 1.1;
+  }
+  drawTextLines(c, leftLines, x + pad, ly, leftW);
+
+  const midH = linesHeight(mid);
+  drawTextLines(c, mid, x + pad + leftW + gap, y + (boxH - midH) / 2, textW);
+
+  if (withMap) {
+    drawMiniFrame(c, mini, x + boxW - pad - mapSide, y + (boxH - mapSide) / 2, mapSide,
+      Math.min(base * 0.45, mapSide * 0.12));
+  }
+  drawBrandBadge(c, data.brand, x, y, boxW, boxH, base, $('position').value.startsWith('top'));
+}
+
+/** Ringkas: kotak kecil di salah satu sudut foto. */
+function layoutCompact(c, w, h, g, data, theme, mini) {
+  const { base, pad } = g;
+  const withMap = !!mini;
+  const mapSide = base * 3.8;
+  const textW = Math.min(w * 0.42, base * 13);
+
+  const lines = [];
+  c.font = `700 ${base * 0.86}px Arial, sans-serif`;
+  for (const t of wrapText(c, data.headline, textW, 1)) {
+    lines.push({ text: t, size: base * 0.86, weight: 700, color: theme.title, lh: 1.36 });
+  }
+  if (data.coordsShort) lines.push({ text: data.coordsShort, size: base * 0.64, weight: 400, color: theme.body });
+  if (data.date || data.time) {
+    lines.push({ text: [data.dateShort, data.time].filter(Boolean).join('  ·  '),
+      size: base * 0.68, weight: 500, color: theme.title });
+  }
+  if (data.altShort) lines.push({ text: `Ketinggian ${data.altShort}`, size: base * 0.62, weight: 400, color: theme.body });
+
+  c.font = `400 ${base * 0.68}px Arial, sans-serif`;
+  const widest = Math.max(...lines.map((l) => {
+    c.font = `${l.weight} ${l.size}px Arial, sans-serif`;
+    return c.measureText(l.text).width;
+  }));
+  const innerPad = base * 0.6;
+  const textH = linesHeight(lines);
+  const boxW = Math.min(w - pad * 2, widest + innerPad * 2 + (withMap ? mapSide + innerPad : 0));
+  const boxH = Math.max(withMap ? mapSide : 0, textH) + innerPad * 2;
+  const { x, y } = boxPosition(w, h, boxW, boxH, pad, false);
+
+  roundBox(c, x, y, boxW, boxH, Math.min(base * 0.6, boxH * 0.2),
+    `rgba(${theme.bg},${Number($('opacity').value) / 100})`);
+  if (theme.accent) roundBox(c, x, y, Math.max(2, base * 0.12), boxH, base * 0.25, theme.accent);
+
+  let textX = x + innerPad;
+  if (withMap) {
+    drawMiniFrame(c, mini, x + innerPad, y + (boxH - mapSide) / 2, mapSide, base * 0.3);
+    textX = x + innerPad * 2 + mapSide;
+  }
+  drawTextLines(c, lines, textX, y + (boxH - textH) / 2, boxW - (textX - x) - innerPad);
+  drawBrandBadge(c, data.brand, x, y, boxW, boxH, base, $('position').value.startsWith('top'));
+}
+
+/** Pita tipis selebar foto, tanpa peta. */
+function layoutBar(c, w, h, g, data) {
+  const { base, pad } = g;
+  const theme = STAMP_THEMES[$('theme').value] || STAMP_THEMES.dark;
+  const boxW = w;
+  const innerPad = base * 1.1;
+  const textW = boxW - innerPad * 2;
+
+  const main = [data.headline, [data.dateShort, data.time].filter(Boolean).join(' ')]
+    .filter(Boolean).join('  ·  ');
+  const sub = [data.coordsShort, data.altShort && `Ketinggian ${data.altShort}`]
+    .filter(Boolean).join('  ·  ');
+
+  const lines = [];
+  c.font = `600 ${base * 0.86}px Arial, sans-serif`;
+  for (const t of wrapText(c, main, textW, 1)) {
+    lines.push({ text: t, size: base * 0.86, weight: 600, color: theme.title, lh: 1.34 });
+  }
+  if (sub) {
+    c.font = `400 ${base * 0.68}px Arial, sans-serif`;
+    for (const t of wrapText(c, sub, textW, 1)) {
+      lines.push({ text: t, size: base * 0.68, weight: 400, color: theme.body });
+    }
+  }
+
+  const textH = linesHeight(lines);
+  const boxH = textH + innerPad * 1.1;
+  const top = ($('position').value || '').startsWith('top');
+  const y = top ? 0 : h - boxH;
+
+  c.fillStyle = `rgba(${theme.bg},${Number($('opacity').value) / 100})`;
+  c.fillRect(0, y, boxW, boxH);
+  if (theme.accent) {
+    c.fillStyle = theme.accent;
+    c.fillRect(0, top ? y + boxH - Math.max(2, base * 0.1) : y, boxW, Math.max(2, base * 0.1));
+  }
+  drawTextLines(c, lines, innerPad, y + (boxH - textH) / 2, textW);
+
+  if (data.brand) {
+    c.font = `700 ${base * 0.68}px Arial, sans-serif`;
+    c.fillStyle = theme.body;
+    c.textAlign = 'right';
+    c.fillText(data.brand, boxW - innerPad, y + (boxH - base * 0.68) / 2, boxW * 0.3);
+    c.textAlign = 'left';
+  }
+}
+
+/** Klasik: teks berbayang tanpa kotak, seperti stempel tanggal kamera analog. */
+function layoutClassic(c, w, h, g, data, theme) {
+  const { base, pad } = g;
+  const color = theme.plain;
+  const right = !($('position').value || '').endsWith('left');
+  const top = ($('position').value || '').startsWith('top');
+
+  const lines = [];
+  const stamp = [data.dateShort, data.clock].filter(Boolean).join('  ');
+  if (stamp) lines.push({ text: stamp, size: base * 1.25, weight: 700 });
+  if (data.time) lines.push({ text: data.time.split(' ').pop(), size: base * 0.7, weight: 500 });
+  if (data.headline) lines.push({ text: data.headline, size: base * 0.75, weight: 500 });
+  if (data.coordsShort) lines.push({ text: data.coordsShort, size: base * 0.65, weight: 400 });
+  if (data.altShort) lines.push({ text: `Ketinggian ${data.altShort}`, size: base * 0.65, weight: 400 });
+  if (data.brand) lines.push({ text: data.brand, size: base * 0.62, weight: 600 });
+  if (!lines.length) return;
+
+  const textH = linesHeight(lines);
+  const y = top ? pad : h - pad - textH;
+  const x = right ? w - pad : pad;
+
+  c.save();
+  c.globalAlpha = Math.max(0.5, Number($('opacity').value) / 100);
+  c.textAlign = right ? 'right' : 'left';
+  c.shadowColor = 'rgba(0,0,0,.65)';
+  c.shadowBlur = base * 0.35;
+  c.shadowOffsetY = base * 0.06;
+  let ty = y;
+  for (const line of lines) {
+    c.fillStyle = color;
+    c.font = `${line.weight} ${line.size}px Arial, sans-serif`;
+    c.fillText(line.text, x, ty, w - pad * 2);
+    ty += line.size * 1.3;
+  }
+  c.restore();
+  c.textAlign = 'left';
+}
+
+const LAYOUT_RENDERERS = {
+  card: layoutCard,
+  bigdate: layoutBigDate,
+  compact: layoutCompact,
+  bar: layoutBar,
+  classic: layoutClassic,
+};
+
 function draw(mini) {
   const w = photo.naturalWidth;
   const h = photo.naturalHeight;
@@ -313,122 +674,15 @@ function draw(mini) {
   canvas.height = h;
   ctx.clearRect(0, 0, w, h);
   ctx.drawImage(photo, 0, 0, w, h);
-
-  const { base, pad, mapSide } = stampGeometry(w, h);
-  const theme = STAMP_THEMES[$('theme').value] || STAMP_THEMES.dark;
-  const d = currentInstant();
-  const tz = $('timezone').value;
-
-  const place = $('place').value.trim() || 'Lokasi tidak diketahui';
-  const headline = $('headline').value.trim() || place.split(',').slice(0, 2).join(',').trim();
-  const withMap = $('showMap').checked && !!mini;
-
-  const panelW = w - pad * 2;
-  const innerW = panelW - pad * 2;
-  const textW = Math.max(base * 6, innerW - (withMap ? mapSide + base * 0.9 : 0));
-
-  // --- susun baris teks ---
-  const lines = [];
-  ctx.font = `700 ${base * 1.18}px Arial, sans-serif`;
-  for (const t of wrapText(ctx, headline, textW, 1)) {
-    lines.push({ text: t, size: base * 1.18, weight: 700, color: theme.title, lh: 1.32 });
-  }
-  if (place && place !== headline) {
-    ctx.font = `400 ${base * 0.78}px Arial, sans-serif`;
-    for (const t of wrapText(ctx, place, textW, 2)) {
-      lines.push({ text: t, size: base * 0.78, weight: 400, color: theme.body, lh: 1.3 });
-    }
-  }
-  if ($('showCoords').checked) {
-    const text = `Lat ${coordLabel($('lat').value.trim(), 'N', 'S')}   Long ${coordLabel($('lon').value.trim(), 'E', 'W')}`;
-    lines.push({ text, size: base * 0.8, weight: 500, color: theme.body, lh: 1.32 });
-  }
-  if ($('showAlt').checked) {
-    const alt = $('alt').value.trim() || '—';
-    lines.push({ text: `Ketinggian ${alt} meter`, size: base * 0.78, weight: 400, color: theme.body, lh: 1.32 });
-  }
-  if ($('showDate').checked || $('showTime').checked) {
-    const bits = [];
-    if ($('showDate').checked) bits.push(fmtDate(d, tz));
-    if ($('showTime').checked) bits.push(`${fmtTime(d, tz)} ${tzLabel(d, tz)}`);
-    lines.push({ text: bits.join('  ·  '), size: base * 0.8, weight: 500, color: theme.title, lh: 1.32 });
-  }
-  if ($('showTime').checked) {
-    lines.push({ text: `${gmtOffsetLabel(d, tz)}  ·  GMT ${fmtTime(d, 'UTC')}`, size: base * 0.72, weight: 400, color: theme.body, lh: 1.3 });
-  }
-
-  const textH = lines.reduce((sum, l) => sum + l.size * l.lh, 0);
-  const contentH = Math.max(withMap ? mapSide : 0, textH);
-  const panelH = contentH + pad * 1.2;
-  const x = pad;
-  const y = h - panelH - pad * 0.8;
-  const radius = Math.min(base * 0.8, panelH * 0.22);
-
-  // --- latar kotak ---
-  ctx.save();
-  ctx.fillStyle = `rgba(${theme.bg},${Number($('opacity').value) / 100})`;
-  ctx.beginPath();
-  ctx.roundRect(x, y, panelW, panelH, radius);
-  ctx.fill();
-  if (theme.accent) {
-    ctx.beginPath();
-    ctx.roundRect(x, y, Math.max(3, base * 0.14), panelH, radius * 0.4);
-    ctx.fillStyle = theme.accent;
-    ctx.fill();
-  }
-  ctx.restore();
-
-  // --- peta mini ---
-  let textX = x + pad;
-  if (withMap) {
-    const mx = x + pad;
-    const my = y + (panelH - mapSide) / 2;
-    const r = Math.min(base * 0.45, mapSide * 0.12);
-    ctx.save();
-    ctx.beginPath();
-    ctx.roundRect(mx, my, mapSide, mapSide, r);
-    ctx.clip();
-    ctx.drawImage(mini, mx, my, mapSide, mapSide);
-    ctx.restore();
-    ctx.save();
-    ctx.lineWidth = Math.max(1, base * 0.06);
-    ctx.strokeStyle = 'rgba(255,255,255,.55)';
-    ctx.beginPath();
-    ctx.roundRect(mx, my, mapSide, mapSide, r);
-    ctx.stroke();
-    ctx.restore();
-    textX = mx + mapSide + base * 0.9;
-  }
-
-  // --- teks ---
   ctx.textBaseline = 'top';
-  let ty = y + (panelH - textH) / 2;
-  for (const line of lines) {
-    ctx.fillStyle = line.color;
-    ctx.font = `${line.weight} ${line.size}px Arial, sans-serif`;
-    ctx.fillText(line.text, textX, ty, textW);
-    ty += line.size * line.lh;
-  }
+  ctx.textAlign = 'left';
 
-  // --- label kamera, di atas kotak ---
-  if ($('showBrand').checked) {
-    const brand = $('brand').value.trim();
-    if (brand) {
-      ctx.font = `700 ${base * 0.72}px Arial, sans-serif`;
-      const bw = Math.min(panelW * 0.6, ctx.measureText(brand).width + base * 1.1);
-      const bh = base * 1.3;
-      const bx = x + panelW - bw;
-      const by = y - bh - base * 0.3;
-      ctx.fillStyle = 'rgba(245,245,245,.92)';
-      ctx.beginPath();
-      ctx.roundRect(bx, by, bw, bh, bh * 0.28);
-      ctx.fill();
-      ctx.fillStyle = '#1d2430';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(brand, bx + base * 0.55, by + bh / 2, bw - base * 1.1);
-      ctx.textBaseline = 'top';
-    }
-  }
+  const g = stampGeometry(w, h);
+  const theme = STAMP_THEMES[$('theme').value] || STAMP_THEMES.dark;
+  const key = layoutKey();
+  const usableMini = LAYOUTS[key].usesMap && $('showMap').checked ? mini : null;
+
+  LAYOUT_RENDERERS[key](ctx, w, h, g, stampData(), theme, usableMini);
 
   $('empty').classList.add('hidden');
   canvas.classList.remove('hidden');
@@ -446,7 +700,7 @@ async function render() {
   const style = $('mapStyle').value;
   const { mapSide } = stampGeometry(photo.naturalWidth, photo.naturalHeight);
   const size = Math.round(mapSide);
-  const wantMap = $('showMap').checked && Number.isFinite(lat) && Number.isFinite(lon);
+  const wantMap = layoutUsesMap() && Number.isFinite(lat) && Number.isFinite(lon);
   const key = wantMap ? miniKey(lat, lon, zoom, style, size) : null;
 
   // Gambar dulu dengan peta yang sudah tersimpan agar pratinjau tetap responsif.
@@ -841,6 +1095,9 @@ $('resetBtn').onclick = () => {
   $('opacity').value = '84';
   $('scale').value = '1';
   $('theme').value = 'dark';
+  $('layout').value = 'card';
+  $('position').value = 'bottom-right';
+  syncLayoutControls();
   $('mapStyle').value = DEFAULT_STYLE;
   $('mapZoom').value = '14';
   ['showBrand', 'showTime', 'showDate', 'showAlt', 'showCoords', 'showMap', 'autoPlace']
@@ -857,8 +1114,8 @@ $('resetBtn').onclick = () => {
 
 [
   'place', 'headline', 'lat', 'lon', 'alt', 'datetime', 'timezone', 'opacity', 'scale',
-  'brand', 'theme', 'format', 'mapZoom', 'showBrand', 'showTime', 'showDate', 'showAlt',
-  'showCoords', 'showMap',
+  'brand', 'theme', 'layout', 'position', 'format', 'mapZoom', 'showBrand', 'showTime',
+  'showDate', 'showAlt', 'showCoords', 'showMap',
 ].forEach((id) => $(id).addEventListener('input', render));
 
 ['lat', 'lon'].forEach((id) => $(id).addEventListener('change', () => {
@@ -869,6 +1126,15 @@ $('resetBtn').onclick = () => {
 $('mapZoom').addEventListener('change', () => {
   if (map) map.setZoom(Number($('mapZoom').value));
 });
+
+/** Kontrol peta mini dimatikan pada model stempel yang memang tidak memakainya. */
+function syncLayoutControls() {
+  const usesMap = LAYOUTS[layoutKey()].usesMap;
+  ['showMap', 'mapStyle', 'mapZoom'].forEach((id) => { $(id).disabled = !usesMap; });
+  $('showMap').closest('.checkrow').style.opacity = usesMap ? '' : '.5';
+}
+$('layout').addEventListener('change', syncLayoutControls);
+syncLayoutControls();
 
 function syncRangeLabels() {
   $('opacityVal').textContent = `${$('opacity').value}%`;

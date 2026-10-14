@@ -24,6 +24,10 @@ Foto diproses sepenuhnya di browser — tidak pernah diunggah ke server mana pun
   disusun dari tile basemap langsung di canvas, lengkap dengan atribusi.
 - Zona waktu WIB/WITA/WIT; jam yang diketik dibaca sebagai jam dinding zona terpilih,
   baris GMT dihitung dari situ.
+- **Lima model stempel**: *Kartu peta* (peta mini + rincian lengkap), *Jam besar*
+  (jam raksasa di kiri), *Ringkas di sudut*, *Pita tipis* selebar foto, dan
+  *Klasik tanpa kotak* bergaya stempel tanggal kamera analog. Posisinya bisa
+  dipindah ke empat sudut.
 - Tiga tema stempel, pengaturan transparansi, ukuran teks, label kamera,
   dan pilihan kolom yang ditampilkan.
 - Unduh hasil sebagai JPG/PNG beresolusi asli, atau salin ke clipboard. Nama file
