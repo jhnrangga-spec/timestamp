@@ -1,0 +1,6 @@
+# Berisi kunci API — dibuat saat build, jangan di-commit.
+config.js
+
+node_modules/
+.vercel/
+.DS_Store
