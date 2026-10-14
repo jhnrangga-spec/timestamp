@@ -2,7 +2,8 @@
 <html lang="id">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0b1020">
 <title>GPS Timestamp Studio</title>
 <meta name="description" content="Tambahkan stempel GPS, alamat, peta mini, dan waktu ke foto. Semua pemrosesan berlangsung di browser.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ctext y='25' font-size='24'%3E%F0%9F%93%8D%3C/text%3E%3C/svg%3E">
@@ -13,81 +14,66 @@
 
 <header class="topbar">
   <div class="topbar-inner">
-    <div>
+    <div class="brandline">
       <h1>GPS Timestamp Studio</h1>
-      <p>Stempel lokasi, peta mini, dan waktu ke foto. Foto tidak pernah diunggah &mdash; semuanya diproses di browser Anda.</p>
+      <p>Stempel lokasi, peta mini, dan waktu ke foto &mdash; semuanya diproses di browser Anda.</p>
     </div>
-    <button class="btn" id="themeBtn" type="button" title="Ganti tema">◐ Tema</button>
+    <button class="btn icon-btn" id="themeBtn" type="button" title="Ganti tema terang/gelap" aria-label="Ganti tema">◐</button>
   </div>
 </header>
 
 <main>
-  <!-- ================= KOLOM KIRI: KONTROL ================= -->
-  <section class="panel controls">
-    <nav class="tabs" role="tablist" aria-label="Menu pengaturan">
-      <button class="tab is-active" role="tab" aria-selected="true"  data-tab="foto">Foto</button>
-      <button class="tab"           role="tab" aria-selected="false" data-tab="pin">Pin Map</button>
-      <button class="tab"           role="tab" aria-selected="false" data-tab="waktu">Waktu</button>
-      <button class="tab"           role="tab" aria-selected="false" data-tab="gaya">Gaya</button>
-    </nav>
+  <!-- ============ FOTO + PRATINJAU ============ -->
+  <div class="col-main">
+    <section class="card" id="cardFoto">
+      <h2>1. Foto</h2>
+      <label class="dropzone" id="dropzone" for="photo">
+        <span class="dropzone-icon" aria-hidden="true">🖼️</span>
+        <span class="dropzone-text"><strong>Ketuk untuk memilih foto</strong><br>atau seret foto ke sini</span>
+        <input id="photo" type="file" accept="image/*" class="visually-hidden">
+      </label>
 
-    <!-- ---- TAB FOTO ---- -->
-    <div class="tabpanel is-active" data-panel="foto">
+      <div class="preview-wrap" id="previewWrap">
+        <div class="empty" id="empty">Pratinjau hasil akan muncul di sini.</div>
+        <canvas id="canvas" class="hidden"></canvas>
+      </div>
+      <p class="small">Stempel ditempel di bagian bawah foto dengan resolusi asli foto.</p>
+    </section>
+
+    <!-- ============ PETA PIN ============ -->
+    <section class="card" id="cardMap">
+      <h2>2. Pin lokasi di map</h2>
       <div class="field">
-        <label for="photo">Pilih foto</label>
-        <input id="photo" type="file" accept="image/*">
-        <p class="note">Bisa juga seret foto ke area pratinjau.</p>
+        <label for="search">Cari alamat atau tempat</label>
+        <div class="inline">
+          <input id="search" placeholder="cth. Monas Jakarta" autocomplete="off" enterkeyhint="search">
+          <button class="btn" id="searchBtn" type="button">Cari</button>
+        </div>
+        <ul class="results hidden" id="results"></ul>
+      </div>
+      <div class="btnrow">
+        <button class="btn primary" id="gpsBtn" type="button">◎ Ambil GPS sekarang</button>
+        <button class="btn" id="mapCenterBtn" type="button">⌖ Pusatkan ke pin</button>
+      </div>
+      <div id="map" class="map"></div>
+      <p class="small" id="pinInfo">Ketuk peta atau seret pin merah untuk memindahkan lokasi.</p>
+
+      <div class="grid2">
+        <div class="field"><label for="lat">Garis lintang</label><input id="lat" value="1.096827" inputmode="decimal"></div>
+        <div class="field"><label for="lon">Garis bujur</label><input id="lon" value="127.470366" inputmode="decimal"></div>
       </div>
       <div class="field">
         <label for="place">Nama lokasi / alamat</label>
         <input id="place" value="Jailolo, Halmahera Barat, Maluku Utara, Indonesia" placeholder="Nama lokasi">
       </div>
-      <div class="field">
-        <label for="headline">Judul besar (opsional)</label>
-        <input id="headline" placeholder="Kosongkan untuk otomatis dari alamat">
-      </div>
-      <div class="btnrow">
-        <button class="btn primary" id="gpsBtn" type="button">◎ Ambil GPS sekarang</button>
-        <button class="btn" id="resetBtn" type="button">Reset contoh</button>
-      </div>
-      <p class="note">GPS butuh izin lokasi dan harus diakses lewat HTTPS atau localhost.</p>
-    </div>
-
-    <!-- ---- TAB PIN MAP ---- -->
-    <div class="tabpanel" data-panel="pin">
-      <div class="field">
-        <label for="search">Cari alamat atau tempat</label>
-        <div class="inline">
-          <input id="search" placeholder="cth. Monas Jakarta" autocomplete="off">
-          <button class="btn" id="searchBtn" type="button">Cari</button>
-        </div>
-        <ul class="results hidden" id="results"></ul>
-      </div>
-      <div class="grid2">
-        <div class="field"><label for="lat">Garis lintang</label><input id="lat" value="1.096827" inputmode="decimal"></div>
-        <div class="field"><label for="lon">Garis bujur</label><input id="lon" value="127.470366" inputmode="decimal"></div>
-      </div>
-      <div class="grid2">
-        <div class="field"><label for="alt">Ketinggian (meter)</label><input id="alt" value="22.4" inputmode="decimal"></div>
-        <div class="field"><label for="mapZoom">Zoom peta mini</label><input id="mapZoom" type="range" min="3" max="18" value="14"></div>
-      </div>
-      <label class="checkrow"><input id="showMap" type="checkbox" checked> Tampilkan peta mini di dalam stempel</label>
       <label class="checkrow"><input id="autoPlace" type="checkbox" checked> Isi nama lokasi otomatis saat pin dipindah</label>
-      <div class="field">
-        <label for="mapStyle">Gaya peta mini</label>
-        <select id="mapStyle">
-          <option value="voyager">CARTO Voyager (warna)</option>
-          <option value="positron">CARTO Positron (terang)</option>
-          <option value="darkmatter">CARTO Dark Matter (gelap)</option>
-          <option value="osm">Standar OpenStreetMap</option>
-          <option value="topo">OpenTopoMap</option>
-        </select>
-      </div>
-      <p class="note">Klik di peta bawah untuk memindahkan pin, atau seret penanda merahnya.</p>
-    </div>
+    </section>
+  </div>
 
-    <!-- ---- TAB WAKTU ---- -->
-    <div class="tabpanel" data-panel="waktu">
+  <!-- ============ PENGATURAN ============ -->
+  <div class="col-side">
+    <section class="card">
+      <h2>3. Tanggal &amp; waktu</h2>
       <div class="field"><label for="datetime">Tanggal dan jam lokal</label><input id="datetime" type="datetime-local"></div>
       <div class="field">
         <label for="timezone">Zona waktu tampilan</label>
@@ -98,67 +84,71 @@
         </select>
       </div>
       <div class="btnrow"><button class="btn" id="nowBtn" type="button">Gunakan tanggal &amp; jam sekarang</button></div>
-      <label class="checkrow"><input id="showTime" type="checkbox" checked> Tampilkan waktu lokal dan GMT</label>
-      <label class="checkrow"><input id="showDate" type="checkbox" checked> Tampilkan tanggal</label>
-      <label class="checkrow"><input id="showAlt" type="checkbox" checked> Tampilkan ketinggian</label>
-      <label class="checkrow"><input id="showCoords" type="checkbox" checked> Tampilkan koordinat</label>
-    </div>
+    </section>
 
-    <!-- ---- TAB GAYA ---- -->
-    <div class="tabpanel" data-panel="gaya">
+    <section class="card">
+      <h2>4. Isi stempel</h2>
       <div class="field">
-        <label for="theme">Tema stempel</label>
-        <select id="theme">
-          <option value="dark">Gelap transparan</option>
-          <option value="light">Terang</option>
-          <option value="accent">Gelap + garis aksen</option>
-        </select>
+        <label for="headline">Judul besar (opsional)</label>
+        <input id="headline" placeholder="Kosongkan untuk otomatis dari alamat">
       </div>
       <div class="grid2">
-        <div class="field"><label for="opacity">Transparansi kotak</label><input id="opacity" type="range" min="35" max="100" value="84"></div>
+        <div class="field"><label for="alt">Ketinggian (meter)</label><input id="alt" value="22.4" inputmode="decimal"></div>
+        <div class="field"><label for="brand">Label kamera</label><input id="brand" value="GPS Map Camera"></div>
+      </div>
+      <div class="checkgrid">
+        <label class="checkrow"><input id="showMap" type="checkbox" checked> Peta mini</label>
+        <label class="checkrow"><input id="showCoords" type="checkbox" checked> Koordinat</label>
+        <label class="checkrow"><input id="showAlt" type="checkbox" checked> Ketinggian</label>
+        <label class="checkrow"><input id="showDate" type="checkbox" checked> Tanggal</label>
+        <label class="checkrow"><input id="showTime" type="checkbox" checked> Waktu &amp; GMT</label>
+        <label class="checkrow"><input id="showBrand" type="checkbox" checked> Label kamera</label>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>5. Tampilan</h2>
+      <div class="grid2">
+        <div class="field">
+          <label for="theme">Tema stempel</label>
+          <select id="theme">
+            <option value="dark">Gelap transparan</option>
+            <option value="light">Terang</option>
+            <option value="accent">Gelap + garis aksen</option>
+          </select>
+        </div>
         <div class="field">
           <label for="scale">Ukuran teks</label>
           <select id="scale"><option value="0.85">Kecil</option><option value="1" selected>Normal</option><option value="1.15">Besar</option></select>
         </div>
       </div>
-      <div class="field"><label for="brand">Label kamera</label><input id="brand" value="GPS Map Camera"></div>
-      <label class="checkrow"><input id="showBrand" type="checkbox" checked> Tampilkan label kamera</label>
+      <div class="field">
+        <label for="opacity">Transparansi kotak <span class="val" id="opacityVal">84%</span></label>
+        <input id="opacity" type="range" min="35" max="100" value="84">
+      </div>
+      <div class="grid2">
+        <div class="field">
+          <label for="mapStyle">Gaya peta mini</label>
+          <select id="mapStyle">
+            <option value="voyager">CARTO Voyager (warna)</option>
+            <option value="positron">CARTO Positron (terang)</option>
+            <option value="darkmatter">CARTO Dark Matter (gelap)</option>
+            <option value="osm">Standar OpenStreetMap</option>
+            <option value="topo">OpenTopoMap</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="mapZoom">Zoom peta mini <span class="val" id="zoomVal">14</span></label>
+          <input id="mapZoom" type="range" min="3" max="18" value="14">
+        </div>
+      </div>
       <div class="field">
         <label for="format">Format unduhan</label>
         <select id="format"><option value="image/jpeg">JPG (ukuran kecil)</option><option value="image/png">PNG (paling tajam)</option></select>
       </div>
-    </div>
-
-    <div class="btnrow sticky-actions">
-      <button class="btn primary" id="downloadBtn" type="button">↓ Unduh foto hasil</button>
-      <button class="btn" id="copyBtn" type="button">⧉ Salin ke clipboard</button>
-    </div>
-    <div class="status" id="status" role="status" aria-live="polite"></div>
-  </section>
-
-  <!-- ================= KOLOM KANAN: PRATINJAU + MAP ================= -->
-  <section class="stack">
-    <div class="panel">
-      <h2>Pratinjau hasil</h2>
-      <div class="preview-wrap" id="previewWrap">
-        <div class="empty" id="empty">Pilih atau seret foto untuk melihat hasil stempel di sini.</div>
-        <canvas id="canvas" class="hidden"></canvas>
-      </div>
-      <p class="small">Stempel ditempel di bagian bawah foto dengan resolusi asli foto.</p>
-    </div>
-
-    <div class="panel">
-      <div class="panel-head">
-        <h2>Pin lokasi di map</h2>
-        <div class="btnrow tight">
-          <button class="btn" id="mapGpsBtn" type="button">◎ Posisi saya</button>
-          <button class="btn" id="mapCenterBtn" type="button">⌖ Pusatkan ke pin</button>
-        </div>
-      </div>
-      <div id="map" class="map"></div>
-      <p class="small" id="pinInfo">Klik peta untuk memindahkan pin.</p>
-    </div>
-  </section>
+      <div class="btnrow"><button class="btn" id="resetBtn" type="button">Reset ke contoh</button></div>
+    </section>
+  </div>
 </main>
 
 <footer class="foot">
@@ -167,9 +157,20 @@
   Pencarian alamat: Nominatim / OpenStreetMap.
 </footer>
 
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin="anonymous"></script>
+<!-- Bar aksi: menempel di bawah layar pada mobile -->
+<div class="actionbar" id="actionbar">
+  <div class="actionbar-inner">
+    <div class="status" id="status" role="status" aria-live="polite">Pilih foto untuk mulai.</div>
+    <div class="btnrow tight">
+      <button class="btn" id="copyBtn" type="button">⧉ Salin</button>
+      <button class="btn primary" id="downloadBtn" type="button">↓ Unduh foto</button>
+    </div>
+  </div>
+</div>
+
 <!-- config.js dibuat saat build dari env CARTO_BASEMAP_KEY; aman bila tidak ada. -->
 <script src="config.js"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin="anonymous"></script>
 <script src="app.js"></script>
 </body>
 </html>

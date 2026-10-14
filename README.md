@@ -6,7 +6,11 @@ Foto diproses sepenuhnya di browser — tidak pernah diunggah ke server mana pun
 
 ## Fitur
 
-- **Pin Map** — peta interaktif (Leaflet) di bawah pratinjau foto. Klik peta atau
+- **Satu halaman** — semua pengaturan tersusun dalam satu alur (Foto → Pin map →
+  Waktu → Isi stempel → Tampilan), tanpa menu bertab, dan nyaman dipakai di HP:
+  area sentuh besar, kolom menumpuk otomatis, serta bar aksi Unduh/Salin yang
+  menempel di bawah layar.
+- **Pin Map** — peta interaktif (Leaflet) di bawah pratinjau foto. Ketuk peta atau
   seret pin untuk menentukan lokasi; koordinat dan nama alamat ikut terisi.
 - **Pencarian alamat** (Nominatim/OpenStreetMap) dan tombol **ambil GPS perangkat**.
 - **Peta mini di dalam stempel** — potongan peta persegi dengan penanda merah,
@@ -15,7 +19,8 @@ Foto diproses sepenuhnya di browser — tidak pernah diunggah ke server mana pun
   baris GMT dihitung dari situ.
 - Tiga tema stempel, pengaturan transparansi, ukuran teks, label kamera,
   dan pilihan kolom yang ditampilkan.
-- Unduh hasil sebagai JPG/PNG beresolusi asli, atau salin ke clipboard.
+- Unduh hasil sebagai JPG/PNG beresolusi asli, atau salin ke clipboard. Nama file
+  mengikuti waktu yang diset: `07-03-2026-18.45.09.jpg` (tanggal-bulan-tahun-jam).
 
 ## Menjalankan di lokal
 

@@ -73,22 +73,6 @@ $('themeBtn').onclick = () => {
   localStorage.setItem('gts-theme', next);
 };
 
-/* ------------------------------------------------------------------- tabs */
-
-document.querySelectorAll('.tab').forEach((tab) => {
-  tab.onclick = () => {
-    document.querySelectorAll('.tab').forEach((t) => {
-      const on = t === tab;
-      t.classList.toggle('is-active', on);
-      t.setAttribute('aria-selected', String(on));
-    });
-    document.querySelectorAll('.tabpanel').forEach((p) => {
-      p.classList.toggle('is-active', p.dataset.panel === tab.dataset.tab);
-    });
-    if (tab.dataset.tab === 'pin' && map) setTimeout(() => map.invalidateSize(), 60);
-  };
-});
-
 /* ------------------------------------------------------- tanggal & waktu */
 
 $('datetime').step = 1;
@@ -492,12 +476,14 @@ function loadPhotoFile(file) {
 
 $('photo').addEventListener('change', (e) => loadPhotoFile(e.target.files?.[0]));
 
-const wrap = $('previewWrap');
-['dragenter', 'dragover'].forEach((ev) => wrap.addEventListener(ev, (e) => {
-  e.preventDefault(); wrap.classList.add('drag');
-}));
-['dragleave', 'drop'].forEach((ev) => wrap.addEventListener(ev, () => wrap.classList.remove('drag')));
-wrap.addEventListener('drop', (e) => { e.preventDefault(); loadPhotoFile(e.dataTransfer?.files?.[0]); });
+const dropzone = $('dropzone');
+for (const zone of [dropzone, $('previewWrap')]) {
+  ['dragenter', 'dragover'].forEach((ev) => zone.addEventListener(ev, (e) => {
+    e.preventDefault(); dropzone.classList.add('drag');
+  }));
+  ['dragleave', 'drop'].forEach((ev) => zone.addEventListener(ev, () => dropzone.classList.remove('drag')));
+  zone.addEventListener('drop', (e) => { e.preventDefault(); loadPhotoFile(e.dataTransfer?.files?.[0]); });
+}
 
 /* ------------------------------------------------------------- peta pin */
 
@@ -563,6 +549,7 @@ async function initMap() {
     $('mapZoom').value = String(Math.min(18, Math.max(3, Math.round(map.getZoom()))));
     render();
   });
+  setTimeout(() => map.invalidateSize(), 50);
   updatePinInfo();
 }
 
@@ -682,12 +669,20 @@ function takeGps() {
 }
 
 $('gpsBtn').onclick = takeGps;
-$('mapGpsBtn').onclick = takeGps;
 
 /* -------------------------------------------------------- unduh & salin */
 
+/** Nama file: tanggal-bulan-tahun-jam sesuai waktu & zona yang diset. */
 function outputName() {
-  return `foto-gps-timestamp.${$('format').value === 'image/png' ? 'png' : 'jpg'}`;
+  const tz = $('timezone').value;
+  const p = new Intl.DateTimeFormat('en-GB', {
+    timeZone: tz, hour12: false,
+    day: '2-digit', month: '2-digit', year: 'numeric',
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
+  }).formatToParts(currentInstant()).reduce((acc, x) => (acc[x.type] = x.value, acc), {});
+  const hour = p.hour === '24' ? '00' : p.hour;
+  const ext = $('format').value === 'image/png' ? 'png' : 'jpg';
+  return `${p.day}-${p.month}-${p.year}-${hour}.${p.minute}.${p.second}.${ext}`;
 }
 
 async function exportBlob() {
@@ -744,6 +739,7 @@ $('resetBtn').onclick = () => {
     .forEach((id) => { $(id).checked = true; });
   setNow();
   setPin(Number(SAMPLE.lat), Number(SAMPLE.lon), { move: true, geocode: false });
+  syncRangeLabels();
   setStatus('Contoh direset.');
 };
 
@@ -762,6 +758,20 @@ $('resetBtn').onclick = () => {
 
 $('mapZoom').addEventListener('change', () => {
   if (map) map.setZoom(Number($('mapZoom').value));
+});
+
+function syncRangeLabels() {
+  $('opacityVal').textContent = `${$('opacity').value}%`;
+  $('zoomVal').textContent = $('mapZoom').value;
+}
+['opacity', 'mapZoom'].forEach((id) => $(id).addEventListener('input', syncRangeLabels));
+syncRangeLabels();
+
+// Peta perlu dihitung ulang saat lebar layar berubah (rotasi HP, resize).
+let resizeTimer = null;
+window.addEventListener('resize', () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => map && map.invalidateSize(), 180);
 });
 
 $('nowBtn').onclick = () => { setNow(); render(); };
