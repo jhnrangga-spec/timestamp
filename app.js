@@ -8,6 +8,7 @@ const canvas = $('canvas');
 const ctx = canvas.getContext('2d');
 const photo = new Image();
 let hasPhoto = false;
+let photoFile = null;      // disimpan agar EXIF bisa dibaca ulang kapan saja
 
 const SAMPLE = {
   place: 'Jailolo, Halmahera Barat, Maluku Utara, Indonesia',
@@ -460,21 +461,73 @@ async function render() {
 
 /* ------------------------------------------------------------------ foto */
 
+/** Zona waktu pilihan yang cocok dengan offset UTC dari EXIF, bila ada. */
+function timezoneForOffset(minutes) {
+  const match = { 420: 'Asia/Jakarta', 480: 'Asia/Makassar', 540: 'Asia/Jayapura' }[minutes];
+  return match || null;
+}
+
+/** Isi form dari metadata EXIF foto. Mengembalikan daftar bagian yang terisi. */
+async function applyExif(file) {
+  let data = null;
+  try {
+    data = await readPhotoExif(file);
+  } catch {
+    return [];
+  }
+  if (!data) return [];
+
+  const filled = [];
+  if (data.wallClock) {
+    const tz = data.utcOffsetMinutes !== null ? timezoneForOffset(data.utcOffsetMinutes) : null;
+    if (tz) $('timezone').value = tz;
+    $('datetime').value = data.wallClock;
+    filled.push('waktu');
+  }
+  if (Number.isFinite(data.alt)) {
+    setAltitude(data.alt, 'EXIF foto');
+    filled.push('ketinggian');
+  }
+  if (Number.isFinite(data.lat) && Number.isFinite(data.lon)) {
+    setPin(data.lat, data.lon, { move: true, geocode: $('autoPlace').checked });
+    filled.push('lokasi');
+  }
+  return filled;
+}
+
 function loadPhotoFile(file) {
   if (!file) return;
   if (!file.type.startsWith('image/')) { setStatus('File harus berupa gambar.', true); return; }
+  photoFile = file;
   const url = URL.createObjectURL(file);
-  photo.onload = () => {
+  photo.onload = async () => {
     hasPhoto = true;
     URL.revokeObjectURL(url);
-    setStatus(`Foto siap (${photo.naturalWidth}×${photo.naturalHeight} px).`);
+    const size = `${photo.naturalWidth}×${photo.naturalHeight} px`;
     render();
+    if (!$('useExif').checked) { setStatus(`Foto siap (${size}).`); return; }
+    const filled = await applyExif(file);
+    setStatus(filled.length
+      ? `Foto siap (${size}). Dari EXIF: ${filled.join(', ')}.`
+      : `Foto siap (${size}). Foto ini tidak memuat data EXIF GPS/waktu.`);
   };
   photo.onerror = () => { URL.revokeObjectURL(url); setStatus('Foto tidak bisa dibuka.', true); };
   photo.src = url;
 }
 
-$('photo').addEventListener('change', (e) => loadPhotoFile(e.target.files?.[0]));
+$('photo').addEventListener('change', (e) => {
+  loadPhotoFile(e.target.files?.[0]);
+  e.target.value = '';      // agar memilih file yang sama lagi tetap terbaca
+});
+
+// Mencentang EXIF setelah foto termuat langsung menerapkannya.
+$('useExif').addEventListener('change', async () => {
+  if (!$('useExif').checked || !photoFile) return;
+  const filled = await applyExif(photoFile);
+  setStatus(filled.length
+    ? `Dari EXIF foto: ${filled.join(', ')}.`
+    : 'Foto ini tidak memuat data EXIF GPS/waktu.', !filled.length);
+});
 
 const dropzone = $('dropzone');
 for (const zone of [dropzone, $('previewWrap')]) {
@@ -567,6 +620,7 @@ function setPin(lat, lon, { move = true, geocode = true } = {}) {
   updatePinInfo();
   render();
   if (geocode && $('autoPlace').checked) queueReverseGeocode(lat, lon);
+  if (geocode && $('autoAlt').checked) queueElevation(lat, lon);
 }
 
 $('mapCenterBtn').onclick = () => {
@@ -612,6 +666,59 @@ async function reverseGeocode(lat, lon) {
   }
 }
 
+/* ------------------------------------------------- deteksi ketinggian */
+
+const ELEVATION_API = 'https://api.open-meteo.com/v1/elevation';
+let elevationTimer = null;
+let elevationAbort = null;
+
+function setAltitude(meters, source) {
+  $('alt').value = Number(meters).toFixed(1);
+  $('altSource').textContent = source ? `dari ${source}` : '';
+  render();
+}
+
+function queueElevation(lat, lon) {
+  clearTimeout(elevationTimer);
+  elevationTimer = setTimeout(() => lookupElevation(lat, lon, true), 600);
+}
+
+/** Ketinggian permukaan tanah pada koordinat pin (model elevasi ±90 m). */
+async function lookupElevation(lat, lon, quiet) {
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+    setStatus('Koordinat belum valid.', true);
+    return;
+  }
+  elevationAbort?.abort();
+  elevationAbort = new AbortController();
+  $('altBtn').disabled = true;
+  if (!quiet) setStatus('Mencari ketinggian permukaan…');
+  try {
+    const res = await fetch(`${ELEVATION_API}?latitude=${lat}&longitude=${lon}`,
+      { signal: elevationAbort.signal, headers: { Accept: 'application/json' } });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    const meters = Array.isArray(data.elevation) ? data.elevation[0] : data.elevation;
+    if (!Number.isFinite(meters)) throw new Error('data kosong');
+    setAltitude(meters, 'data elevasi peta');
+    setStatus(`Ketinggian permukaan: ${meters.toFixed(1)} m di atas permukaan laut.`);
+  } catch (err) {
+    if (err.name === 'AbortError') return;
+    setStatus('Ketinggian otomatis gagal diambil; isi manual bila perlu.', true);
+  } finally {
+    $('altBtn').disabled = false;
+  }
+}
+
+$('altBtn').onclick = () => {
+  const [lat, lon] = currentLatLng();
+  lookupElevation(lat, lon, false);
+};
+
+$('alt').addEventListener('input', () => { $('altSource').textContent = ''; });
+
+/* ------------------------------------------------------------- pencarian */
+
 async function searchPlace() {
   const q = $('search').value.trim();
   if (!q) { setStatus('Tulis dulu nama tempat yang dicari.', true); return; }
@@ -656,7 +763,7 @@ function takeGps() {
   navigator.geolocation.getCurrentPosition(
     (pos) => {
       const { latitude, longitude, altitude } = pos.coords;
-      if (altitude !== null && Number.isFinite(altitude)) $('alt').value = altitude.toFixed(1);
+      if (altitude !== null && Number.isFinite(altitude)) setAltitude(altitude, 'GPS perangkat');
       setNow();
       setPin(latitude, longitude, { move: true });
       setStatus('Koordinat GPS berhasil diambil.');
@@ -737,6 +844,8 @@ $('resetBtn').onclick = () => {
   $('mapZoom').value = '14';
   ['showBrand', 'showTime', 'showDate', 'showAlt', 'showCoords', 'showMap', 'autoPlace']
     .forEach((id) => { $(id).checked = true; });
+  ['useExif', 'autoAlt'].forEach((id) => { $(id).checked = false; });
+  $('altSource').textContent = '';
   setNow();
   setPin(Number(SAMPLE.lat), Number(SAMPLE.lon), { move: true, geocode: false });
   syncRangeLabels();
@@ -772,6 +881,12 @@ let resizeTimer = null;
 window.addEventListener('resize', () => {
   clearTimeout(resizeTimer);
   resizeTimer = setTimeout(() => map && map.invalidateSize(), 180);
+});
+
+$('autoAlt').addEventListener('change', () => {
+  if (!$('autoAlt').checked) return;
+  const [lat, lon] = currentLatLng();
+  lookupElevation(lat, lon, false);
 });
 
 $('nowBtn').onclick = () => { setNow(); render(); };

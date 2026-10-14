@@ -13,6 +13,13 @@ Foto diproses sepenuhnya di browser — tidak pernah diunggah ke server mana pun
 - **Pin Map** — peta interaktif (Leaflet) di bawah pratinjau foto. Ketuk peta atau
   seret pin untuk menentukan lokasi; koordinat dan nama alamat ikut terisi.
 - **Pencarian alamat** (Nominatim/OpenStreetMap) dan tombol **ambil GPS perangkat**.
+- **Deteksi ketinggian otomatis — opsional, default mati.** Dua sumber:
+  centang *"Ambil lokasi, ketinggian & waktu dari data EXIF foto"* untuk membaca
+  GPSAltitude, koordinat, dan waktu pemotretan langsung dari file foto (offline,
+  tanpa kirim data ke mana pun); atau tombol **Deteksi** / centang *"Deteksi
+  ketinggian otomatis saat pin dipindah"* untuk mengambil ketinggian permukaan
+  tanah di titik pin dari Open-Meteo Elevation API (tanpa kunci). Sumber angka
+  yang sedang dipakai ditampilkan di samping kolom ketinggian.
 - **Peta mini di dalam stempel** — potongan peta persegi dengan penanda merah,
   disusun dari tile basemap langsung di canvas, lengkap dengan atribusi.
 - Zona waktu WIB/WITA/WIT; jam yang diketik dibaca sebagai jam dinding zona terpilih,
@@ -61,3 +68,4 @@ selalu terlihat di sisi klien, jadi pembatasan domain adalah pengamannya.
 Peta © [CARTO](https://carto.com/attributions),
 © [OpenStreetMap](https://www.openstreetmap.org/copyright) contributors.
 Pencarian alamat memakai Nominatim (OpenStreetMap).
+Data ketinggian dari [Open-Meteo](https://open-meteo.com/) (Copernicus DEM).
