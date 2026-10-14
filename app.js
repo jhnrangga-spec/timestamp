@@ -11,10 +11,10 @@ let hasPhoto = false;
 let photoFile = null;      // disimpan agar EXIF bisa dibaca ulang kapan saja
 
 const SAMPLE = {
-  place: 'Bastiong, Ternate Selatan, Kota Ternate, Maluku Utara, Indonesia',
-  lat: '0.763800',
-  lon: '127.376290',
-  alt: '3.0',
+  place: 'Bastiong Talangame, Ternate Selatan, Kota Ternate, Maluku Utara, Indonesia',
+  lat: '0.768672',
+  lon: '127.374420',
+  alt: '5.0',
   brand: 'GPS Map Camera',
 };
 
