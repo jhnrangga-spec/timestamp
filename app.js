@@ -1025,11 +1025,16 @@ function setAltitude(meters, source) {
 
 function queueElevation(lat, lon) {
   clearTimeout(elevationTimer);
-  elevationTimer = setTimeout(() => lookupElevation(lat, lon, true), 600);
+  elevationTimer = setTimeout(() => lookupElevation(lat, lon, { progress: false }), 600);
 }
 
-/** Ketinggian permukaan tanah pada koordinat pin (model elevasi ±90 m). */
-async function lookupElevation(lat, lon, quiet) {
+/**
+ * Ketinggian permukaan tanah pada koordinat pin (model elevasi ±90 m).
+ * `announce` mengatur pesan mana yang ditampilkan: progress saat menunggu,
+ * result saat berhasil, error saat gagal.
+ */
+async function lookupElevation(lat, lon, announce = {}) {
+  const { progress = true, result = true, error = true } = announce;
   if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
     setStatus('Koordinat belum valid.', true);
     return;
@@ -1037,7 +1042,7 @@ async function lookupElevation(lat, lon, quiet) {
   elevationAbort?.abort();
   elevationAbort = new AbortController();
   $('altBtn').disabled = true;
-  if (!quiet) setStatus('Mencari ketinggian permukaan…');
+  if (progress) setStatus('Mencari ketinggian permukaan…');
   const since = statusStamp;
   try {
     const res = await fetch(`${ELEVATION_API}?latitude=${lat}&longitude=${lon}`,
@@ -1047,9 +1052,9 @@ async function lookupElevation(lat, lon, quiet) {
     const meters = Array.isArray(data.elevation) ? data.elevation[0] : data.elevation;
     if (!Number.isFinite(meters)) throw new Error('data kosong');
     setAltitude(meters, 'data elevasi peta');
-    setStatusIfFresh(since, `Ketinggian permukaan: ${meters.toFixed(1)} m di atas permukaan laut.`);
+    if (result) setStatusIfFresh(since, `Ketinggian permukaan: ${meters.toFixed(1)} m di atas permukaan laut.`);
   } catch (err) {
-    if (err.name === 'AbortError') return;
+    if (err.name === 'AbortError' || !error) return;
     setStatusIfFresh(since, 'Ketinggian otomatis gagal diambil; isi manual bila perlu.', true);
   } finally {
     $('altBtn').disabled = false;
@@ -1058,7 +1063,7 @@ async function lookupElevation(lat, lon, quiet) {
 
 $('altBtn').onclick = () => {
   const [lat, lon] = currentLatLng();
-  lookupElevation(lat, lon, false);
+  lookupElevation(lat, lon);
 };
 
 $('alt').addEventListener('input', () => { $('altSource').textContent = ''; });
@@ -1193,7 +1198,8 @@ $('resetBtn').onclick = () => {
   $('mapZoom').value = '14';
   ['showBrand', 'showTime', 'showDate', 'showAlt', 'showCoords', 'showMap', 'autoPlace']
     .forEach((id) => { $(id).checked = true; });
-  ['useExif', 'autoAlt'].forEach((id) => { $(id).checked = false; });
+  $('useExif').checked = false;
+  $('autoAlt').checked = true;
   $('coordPaste').value = '';
   setCoordPasteMessage('');
   $('altSource').textContent = '';
@@ -1246,7 +1252,7 @@ window.addEventListener('resize', () => {
 $('autoAlt').addEventListener('change', () => {
   if (!$('autoAlt').checked) return;
   const [lat, lon] = currentLatLng();
-  lookupElevation(lat, lon, false);
+  lookupElevation(lat, lon);
 });
 
 $('nowBtn').onclick = () => { setNow(); render(); };
@@ -1263,3 +1269,9 @@ if (!HAS_CARTO) {
 
 setNow();
 initMap();
+
+// Karena deteksi ketinggian menyala secara default, ambil sekali untuk pin awal.
+if ($('autoAlt').checked) {
+  const [startLat, startLon] = currentLatLng();
+  lookupElevation(startLat, startLon, { progress: false, result: false, error: false });
+}

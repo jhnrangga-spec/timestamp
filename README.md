@@ -18,7 +18,8 @@ Foto diproses sepenuhnya di browser — tidak pernah diunggah ke server mana pun
   dan isinya otomatis dipecah ke kedua kolom sekaligus memindahkan pin. Menerima
   pemisah koma atau spasi, huruf arah (N/S/E/W), serta format derajat
   (`0°46'39"N 127°22'49"E`), termasuk bila urutan bujur-lintang terbalik.
-- **Deteksi ketinggian otomatis — opsional, default mati.** Dua sumber:
+- **Deteksi ketinggian.** Mode otomatis dari koordinat pin **menyala secara
+  default**; pembacaan EXIF tetap opsional dan default mati. Dua sumber:
   centang *"Ambil lokasi, ketinggian & waktu dari data EXIF foto"* untuk membaca
   GPSAltitude, koordinat, dan waktu pemotretan langsung dari file foto (offline,
   tanpa kirim data ke mana pun); atau tombol **Deteksi** / centang *"Deteksi
