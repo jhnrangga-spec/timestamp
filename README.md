@@ -13,6 +13,11 @@ Foto diproses sepenuhnya di browser — tidak pernah diunggah ke server mana pun
 - **Pin Map** — peta interaktif (Leaflet) di bawah pratinjau foto. Ketuk peta atau
   seret pin untuk menentukan lokasi; koordinat dan nama alamat ikut terisi.
 - **Pencarian alamat** (Nominatim/OpenStreetMap) dan tombol **ambil GPS perangkat**.
+- **Tempel koordinat gabungan** — kolom kosong di atas Lintang/Bujur: tempel satu
+  baris hasil salin dari Google Maps (`0.7775066273861159, 127.38027820539887`)
+  dan isinya otomatis dipecah ke kedua kolom sekaligus memindahkan pin. Menerima
+  pemisah koma atau spasi, huruf arah (N/S/E/W), serta format derajat
+  (`0°46'39"N 127°22'49"E`), termasuk bila urutan bujur-lintang terbalik.
 - **Deteksi ketinggian otomatis — opsional, default mati.** Dua sumber:
   centang *"Ambil lokasi, ketinggian & waktu dari data EXIF foto"* untuk membaca
   GPSAltitude, koordinat, dan waktu pemotretan langsung dari file foto (offline,

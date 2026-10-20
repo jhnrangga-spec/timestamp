@@ -60,6 +60,16 @@
       <div id="map" class="map"></div>
       <p class="small" id="pinInfo">Ketuk peta atau seret pin merah untuk memindahkan lokasi.</p>
 
+      <div class="field">
+        <label for="coordPaste">Tempel koordinat gabungan</label>
+        <div class="inline">
+          <input id="coordPaste" placeholder="0.7775066273861159, 127.38027820539887" autocomplete="off" inputmode="text">
+          <button class="btn" id="coordPasteBtn" type="button">Terapkan</button>
+        </div>
+        <p class="note err-note hidden" id="coordPasteMsg" role="alert"></p>
+        <p class="note">Salin titik dari Google Maps lalu tempel di sini &mdash; otomatis dipecah ke kolom lintang &amp; bujur di bawah. Format derajat (0°46'39&quot;N 127°22'49&quot;E) juga bisa.</p>
+      </div>
+
       <div class="grid2">
         <div class="field"><label for="lat">Garis lintang</label><input id="lat" value="0.768672" inputmode="decimal"></div>
         <div class="field"><label for="lon">Garis bujur</label><input id="lon" value="127.374420" inputmode="decimal"></div>

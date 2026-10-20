@@ -58,10 +58,18 @@ function tileUrl(style, z, x, y) {
 
 /* ---------------------------------------------------------------- status */
 
+let statusStamp = 0;
+
 function setStatus(text, isError) {
   const el = $('status');
   el.textContent = text || '';
   el.classList.toggle('err', !!isError);
+  statusStamp = Date.now();
+}
+
+/** Hasil permintaan lama tidak boleh menimpa pesan yang lebih baru. */
+function setStatusIfFresh(since, text, isError) {
+  if (statusStamp <= since) setStatus(text, isError);
 }
 
 /* ------------------------------------------------------------ tema halaman */
@@ -861,6 +869,87 @@ async function initMap() {
   updatePinInfo();
 }
 
+/**
+ * Baca sepasang koordinat dari satu baris teks.
+ * Menerima "lat, lon" desimal (dengan atau tanpa huruf arah) maupun format
+ * derajat seperti 0°46'39.0"N 127°22'49.0"E. Mengembalikan null bila tidak
+ * terbaca atau di luar rentang yang sah.
+ */
+function parseCoordinatePair(text) {
+  const s = String(text || '').trim();
+  if (!s) return null;
+
+  const dms = [...s.matchAll(/(\d+(?:\.\d+)?)\s*°\s*(?:(\d+(?:\.\d+)?)\s*['′]\s*)?(?:(\d+(?:\.\d+)?)\s*["″]\s*)?\s*([NSEW])/gi)];
+  let lat = null;
+  let lon = null;
+
+  if (dms.length >= 2) {
+    for (const m of dms.slice(0, 2)) {
+      let value = Number(m[1]) + Number(m[2] || 0) / 60 + Number(m[3] || 0) / 3600;
+      const ref = m[4].toUpperCase();
+      if (ref === 'S' || ref === 'W') value = -value;
+      if (ref === 'N' || ref === 'S') lat = value; else lon = value;
+    }
+  } else {
+    const nums = s.match(/-?\d+(?:\.\d+)?/g);
+    if (!nums || nums.length < 2) return null;
+    let a = Number(nums[0]);
+    let b = Number(nums[1]);
+    const refs = (s.toUpperCase().match(/[NSEW]/g) || []).slice(0, 2);
+    if (refs.length === 2) {
+      a = refs[0] === 'S' ? -Math.abs(a) : Math.abs(a);
+      b = refs[1] === 'W' ? -Math.abs(b) : Math.abs(b);
+      if (refs[0] === 'E' || refs[0] === 'W') { const swap = a; a = b; b = swap; }
+    }
+    lat = a;
+    lon = b;
+  }
+
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+  if (Math.abs(lat) > 90 || Math.abs(lon) > 180) return null;
+  return { lat, lon };
+}
+
+/** Terapkan isi kolom tempel ke kolom lintang/bujur dan pin peta. */
+function setCoordPasteMessage(text) {
+  const el = $('coordPasteMsg');
+  el.textContent = text || '';
+  el.classList.toggle('hidden', !text);
+}
+
+function applyPastedCoordinates(loud) {
+  const raw = $('coordPaste').value.trim();
+  if (!raw) {
+    if (loud) setCoordPasteMessage('Kolom ini masih kosong.');
+    return false;
+  }
+  const parsed = parseCoordinatePair(raw);
+  if (!parsed) {
+    // Pesan ditaruh di bawah kolomnya sendiri agar tidak tertimpa proses lain.
+    if (loud) setCoordPasteMessage('Koordinat tidak terbaca. Contoh: 0.777506, 127.380278');
+    return false;
+  }
+  setCoordPasteMessage('');
+  setPin(parsed.lat, parsed.lon, { move: true, geocode: true });
+  setStatus(`Koordinat diterapkan: ${parsed.lat.toFixed(6)}, ${parsed.lon.toFixed(6)}.`);
+  return true;
+}
+
+let coordPasteTimer = null;
+$('coordPaste').addEventListener('input', () => {
+  clearTimeout(coordPasteTimer);
+  setCoordPasteMessage('');
+  if (!$('coordPaste').value.trim()) return;
+  coordPasteTimer = setTimeout(() => applyPastedCoordinates(false), 450);
+});
+$('coordPaste').addEventListener('keydown', (e) => {
+  if (e.key !== 'Enter') return;
+  e.preventDefault();
+  clearTimeout(coordPasteTimer);
+  applyPastedCoordinates(true);
+});
+$('coordPasteBtn').onclick = () => { clearTimeout(coordPasteTimer); applyPastedCoordinates(true); };
+
 function updatePinInfo() {
   const [lat, lon] = currentLatLng();
   $('pinInfo').textContent = `Pin: ${lat.toFixed(6)}, ${lon.toFixed(6)} — klik peta atau seret pin untuk memindahkan.`;
@@ -907,17 +996,18 @@ async function reverseGeocode(lat, lon) {
   reverseAbort?.abort();
   reverseAbort = new AbortController();
   setStatus('Mencari nama lokasi…');
+  const since = statusStamp;
   try {
     const url = `${NOMINATIM}/reverse?format=jsonv2&accept-language=id&lat=${lat}&lon=${lon}`;
     const res = await fetch(url, { signal: reverseAbort.signal, headers: { Accept: 'application/json' } });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     $('place').value = data.display_name || `${lat.toFixed(6)}, ${lon.toFixed(6)}`;
-    setStatus('Nama lokasi diperbarui. Silakan periksa kembali.');
+    setStatusIfFresh(since, 'Nama lokasi diperbarui. Silakan periksa kembali.');
     render();
   } catch (err) {
     if (err.name === 'AbortError') return;
-    setStatus('Nama lokasi otomatis gagal diambil; isi manual bila perlu.', true);
+    setStatusIfFresh(since, 'Nama lokasi otomatis gagal diambil; isi manual bila perlu.', true);
   }
 }
 
@@ -948,6 +1038,7 @@ async function lookupElevation(lat, lon, quiet) {
   elevationAbort = new AbortController();
   $('altBtn').disabled = true;
   if (!quiet) setStatus('Mencari ketinggian permukaan…');
+  const since = statusStamp;
   try {
     const res = await fetch(`${ELEVATION_API}?latitude=${lat}&longitude=${lon}`,
       { signal: elevationAbort.signal, headers: { Accept: 'application/json' } });
@@ -956,10 +1047,10 @@ async function lookupElevation(lat, lon, quiet) {
     const meters = Array.isArray(data.elevation) ? data.elevation[0] : data.elevation;
     if (!Number.isFinite(meters)) throw new Error('data kosong');
     setAltitude(meters, 'data elevasi peta');
-    setStatus(`Ketinggian permukaan: ${meters.toFixed(1)} m di atas permukaan laut.`);
+    setStatusIfFresh(since, `Ketinggian permukaan: ${meters.toFixed(1)} m di atas permukaan laut.`);
   } catch (err) {
     if (err.name === 'AbortError') return;
-    setStatus('Ketinggian otomatis gagal diambil; isi manual bila perlu.', true);
+    setStatusIfFresh(since, 'Ketinggian otomatis gagal diambil; isi manual bila perlu.', true);
   } finally {
     $('altBtn').disabled = false;
   }
@@ -1103,6 +1194,8 @@ $('resetBtn').onclick = () => {
   ['showBrand', 'showTime', 'showDate', 'showAlt', 'showCoords', 'showMap', 'autoPlace']
     .forEach((id) => { $(id).checked = true; });
   ['useExif', 'autoAlt'].forEach((id) => { $(id).checked = false; });
+  $('coordPaste').value = '';
+  setCoordPasteMessage('');
   $('altSource').textContent = '';
   setNow();
   setPin(Number(SAMPLE.lat), Number(SAMPLE.lon), { move: true, geocode: false });
